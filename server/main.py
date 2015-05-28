@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import socket, sys
+import socket, sys, json, time
 from thread import *
 
 try:
@@ -19,7 +19,10 @@ sock.listen(5)
 print "listening"
 
 def clientthread(conn, addr):
-    conn.send('Connected to server. Type something and hit enter\n')
+    initmessage = "Connected to server"
+    data = {"timestamp":time.time(),"message":initmessage}
+    data = json.dumps(data)
+    conn.send(data)
     while True:
         try:
             data = conn.recv(4096)
@@ -27,9 +30,8 @@ def clientthread(conn, addr):
             print 'Receive failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
             conn.close()
             break
-        reply = 'OK...' + data
         try:
-            conn.sendall(reply)
+            conn.sendall(data)
         except socket.error , msg:
             print 'Send failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
             conn.close()
