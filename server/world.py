@@ -2,12 +2,12 @@
 
 import socket, sys, json, time
 
-class player(object):
+class world(object):
     def __init__(self, debug=False):
-        self.sock = player_sock(debug)
+        self.sock = world_sock(debug)
         if self.sock.open():
             while True:
-                input = raw_input("Player >> ")
+                input = raw_input("World >> ")
                 if input != "exit":
                     self.sock.send("message", input)
                 else:
@@ -15,7 +15,7 @@ class player(object):
                 ping, message = self.sock.parse()
                 print int(ping), message
 
-class player_sock(object):
+class world_sock(object):
     def __init__(self, debug=False):
         self.debug = debug
         try:
@@ -23,7 +23,7 @@ class player_sock(object):
         except socket.error, msg:
             print 'Failed to create socket. Error code: ' + str(msg[0]) + ' , Error message : ' + msg[1]
             sys.exit()
-        self.sock.bind((socket.gethostname(), 5192))
+        self.sock.bind((socket.gethostname(), 5191))
         self.sock.connect((socket.gethostname(), 5190))
         print "Connecting"
 
@@ -76,8 +76,8 @@ class player_sock(object):
                 print "Receive", data
             if data["type"] == "message":
                 message = data["content"]
-            elif data["type"] == "state":
-                message = "World state"
+            elif data["type"] == "command":
+                message = "player command"
             elif data["type"] == "log":
                 message = "success"
             ping = time.time() - data["timestamp"]
@@ -88,10 +88,9 @@ class player_sock(object):
 
     def send(self, type, data):
         data = {"timestamp":time.time(), "type":type, "content":data}
-        data = str(len(data))+data
-        data = json.dumps(data)
         if self.debug:
             print "Send", data
+        data = json.dumps(data)
         try:
             self.sock.sendall(data)
             return True
@@ -99,4 +98,4 @@ class player_sock(object):
             print 'Send failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
             return False
 
-player(False)
+world(True)

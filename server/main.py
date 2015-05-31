@@ -6,6 +6,7 @@ from thread import *
 class server_sock(object):
     def __init__(self, debug=False):
         self.debug = debug
+        self.world = ""
         self.players = []
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -25,9 +26,14 @@ class server_sock(object):
     def mainloop(self):
         while True:
             conn, addr = self.sock.accept()
-            print 'Connected with ' + addr[0] + ':' + str(addr[1])
-            self.players.append(conn)
-            start_new_thread(self.player_thread ,(conn, addr))
+            if addr[1] == 5191:
+                print 'Connected with World on ' + addr[0] + ':' + str(addr[1])
+                self.world = conn
+                start_new_thread(self.world_thread ,(conn, addr))
+            elif addr[1] == 5192 and self.world != "":
+                print 'Connected with Player at ' + addr[0] + ':' + str(addr[1])
+                self.players.append(conn)
+                start_new_thread(self.player_thread ,(conn, addr))
 
     def player_thread(self, conn, addr):
         while True:
@@ -40,12 +46,24 @@ class server_sock(object):
         self.players.remove(conn)
         conn.close()
 
+    def world_thread(self, conn, addr):
+        while True:
+            check, data = self.receive(conn)
+            if check:
+                if not self.route(conn, data):
+                    break
+            else:
+                break
+        self.world = ""
+        conn.close()
+
     def send(self, conn, type, content):
         try:
             data = {"timestamp":time.time(), "type":type, "content":content}
+            data = json.dumps(data)
+            data = str(len(data))+data
             if self.debug:
                 print "Send", data
-            data = json.dumps(data)
             conn.sendall(data)
             return True
         except socket.error, msg:
@@ -54,19 +72,35 @@ class server_sock(object):
 
     def receive(self, conn):
         try:
-            data = conn.recv(4096)
-            return True, data
+            length = None
+            buffer = ""
+            while True:
+                data += conn.recv(4096)
+                if not data:
+                    break
+                buffer += data
+                while True:
+                    if length is None:
+                        if '{' not in buffer:
+                            break
+                        length_str, ignored, buffer = buffer.partition('{')
+                        length = int(length_str)
+                    if len(buffer)+1 < length:
+                        break
+                    message = buffer[:length]
+                    return True, message
         except socket.error, msg:
             print 'Receive failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
             return False, "error"
 
     def route(self, conn, data):
+        print "JSON", data
         data = json.loads(data)
         if self.debug:
             print "Receive", data
         if data["type"] == "message":
             #echo message to all clients
-            #self.send(world, "message", data["content"])
+            self.send(self.world, "message", data["content"])
             for player in self.players:
                 self.send(player, "message", data["content"])
             return True
@@ -82,7 +116,7 @@ class server_sock(object):
                 return False
         elif data["type"] == "command":
             #send to world_sock
-            print data["content"]
+            self.send(self.world, "command", data["content"])
             return True
         elif data["type"] == "state":
             #send to all players
