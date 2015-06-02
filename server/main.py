@@ -39,8 +39,9 @@ class server_sock(object):
         while True:
             check, data = self.receive(conn)
             if check:
-                if not self.route(conn, data):
-                    break
+                for row in data:
+                    if not self.route(conn, row):
+                        break
             else:
                 break
         self.players.remove(conn)
@@ -50,8 +51,9 @@ class server_sock(object):
         while True:
             check, data = self.receive(conn)
             if check:
-                if not self.route(conn, data):
-                    break
+                for row in data:
+                    if not self.route(conn, row):
+                        break
             else:
                 break
         self.world = ""
@@ -74,8 +76,9 @@ class server_sock(object):
         try:
             length = None
             buffer = ""
+            messages = []
             while True:
-                data += conn.recv(4096)
+                data = conn.recv(4096)
                 if not data:
                     break
                 buffer += data
@@ -87,14 +90,14 @@ class server_sock(object):
                         length = int(length_str)
                     if len(buffer)+1 < length:
                         break
-                    message = buffer[:length]
-                    return True, message
+                    messages.append("{"+buffer[:length-1])
+                    buffer = buffer[length-1:]
+            return True, messages
         except socket.error, msg:
             print 'Receive failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
             return False, "error"
 
     def route(self, conn, data):
-        print "JSON", data
         data = json.loads(data)
         if self.debug:
             print "Receive", data

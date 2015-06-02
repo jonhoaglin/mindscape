@@ -12,8 +12,11 @@ class world(object):
                     self.sock.send("message", input)
                 else:
                     self.sock.close()
-                ping, message = self.sock.parse()
-                print int(ping), message
+                check, data = self.sock.receive()
+                if check:
+                    self.sock.parse(data)
+                else:
+                    break
 
 class world_sock(object):
     def __init__(self, debug=False):
@@ -23,16 +26,26 @@ class world_sock(object):
         except socket.error, msg:
             print 'Failed to create socket. Error code: ' + str(msg[0]) + ' , Error message : ' + msg[1]
             sys.exit()
-        self.sock.bind((socket.gethostname(), 5191))
-        self.sock.connect((socket.gethostname(), 5190))
-        print "Connecting"
+        try:
+            self.sock.bind((socket.gethostname(), 5191))
+        except socket.error, msg:
+            print 'Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
+            sys.exit()
+        try:
+            self.sock.connect((socket.gethostname(), 5190))
+        except socket.error, msg:
+            print 'Connect failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
+            sys.exit()
+        print "Connected"
 
     def open(self):
         self.send("log", "on")
         i = 0
-        ping, message = self.parse()
-        while message != "success" or ping == 0:
-            ping, message = self.parse()
+        check, data = self.receive()
+        ping, message = self.parse(data)
+        while "success" not in message or ping == 0:
+            check, data = self.receive()
+            ping, message = self.parse(data)
             i += 1
             if i >= 5:
                 return False
@@ -40,9 +53,15 @@ class world_sock(object):
 
     def close(self):
         self.send("log", "off")
-        ping, message = self.parse()
-        while message != "success" or ping == 0:
-            ping, message = self.parse()
+        i = 0
+        check, data = self.receive()
+        ping, message = self.parse(data)
+        while "success" not in message or ping == 0:
+            check, data = self.receive()
+            ping, message = self.parse(data)
+            i += 1
+            if i >= 5:
+                break
         self.sock.close()
         sys.exit()
 
@@ -50,8 +69,9 @@ class world_sock(object):
         try:
             length = None
             buffer = ""
+            messages = []
             while True:
-                data += conn.recv(4096)
+                data = self.sock.recv(4096)
                 if not data:
                     break
                 buffer += data
@@ -63,34 +83,36 @@ class world_sock(object):
                         length = int(length_str)
                     if len(buffer)+1 < length:
                         break
-                    message = buffer[:length]
-                    return True, message
+                    messages.append("{"+buffer[:length-1])
+                    buffer = buffer[length-1:]
+            return True, messages
         except socket.error, msg:
             print 'Receive failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
             return False, "error"
 
-    def parse(self):
-        try:
-            data = json.loads(self.receive())
+    def parse(self, dataset):
+        ping = 0
+        message = ""
+        for row in dataset:
+            data = json.loads(row)
             if self.debug:
                 print "Receive", data
             if data["type"] == "message":
-                message = data["content"]
+                message += data["content"]
             elif data["type"] == "command":
-                message = "player command"
+                message += "player command"
             elif data["type"] == "log":
-                message = "success"
+                message += "success"
             ping = time.time() - data["timestamp"]
-        except socket.error , msg:
-            message = 'Receive failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
-            ping = 0
+            print ping, message
         return ping, message
 
     def send(self, type, data):
         data = {"timestamp":time.time(), "type":type, "content":data}
+        data = json.dumps(data)
+        data = str(len(data))+data
         if self.debug:
             print "Send", data
-        data = json.dumps(data)
         try:
             self.sock.sendall(data)
             return True
