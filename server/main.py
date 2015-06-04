@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import socket, sys, json, time
+import socket, sys, json, time, select
 from thread import *
 
 class server_sock(object):
@@ -37,25 +37,19 @@ class server_sock(object):
 
     def player_thread(self, conn, addr):
         while True:
-            check, data = self.receive(conn)
-            if check:
+            data = self.receive(conn)
+            if data != []:
                 for row in data:
-                    if not self.route(conn, row):
-                        break
-            else:
-                break
+                    self.route(conn, row)
         self.players.remove(conn)
         conn.close()
 
     def world_thread(self, conn, addr):
         while True:
-            check, data = self.receive(conn)
-            if check:
+            data = self.receive(conn)
+            if data != []:
                 for row in data:
-                    if not self.route(conn, row):
-                        break
-            else:
-                break
+                    self.route(conn, row)
         self.world = ""
         conn.close()
 
@@ -73,12 +67,17 @@ class server_sock(object):
             return False
 
     def receive(self, conn):
-        try:
-            length = None
-            buffer = ""
-            messages = []
-            while True:
-                data = conn.recv(4096)
+        length = None
+        buffer = ""
+        messages = []
+        while True:
+            inputready, o, e = select.select([conn], [], [])
+            for input in inputready:
+                try:
+                    data = input.recv(4096)
+                except socket.error, msg:
+                    print 'Receive failed. Error : ', msg
+                    return []
                 if not data:
                     break
                 buffer += data
@@ -92,10 +91,10 @@ class server_sock(object):
                         break
                     messages.append("{"+buffer[:length-1])
                     buffer = buffer[length-1:]
-            return True, messages
-        except socket.error, msg:
-            print 'Receive failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
-            return False, "error"
+                    length = None
+            else:
+                break
+        return messages
 
     def route(self, conn, data):
         data = json.loads(data)

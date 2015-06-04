@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import socket, sys, json, time
+import socket, sys, json, time, select
 
 class player(object):
     def __init__(self, debug=False):
@@ -12,11 +12,11 @@ class player(object):
                     self.sock.send("message", input)
                 else:
                     self.sock.close()
-                check, data = self.sock.receive()
-                if check:
-                    self.sock.parse(data)
-                else:
-                    break
+                data = self.sock.receive()
+                if data != []:
+                    for row in data:
+                        ping, message = self.sock.parse(row)
+                        print ping, message
 
 class player_sock(object):
     def __init__(self, debug=False):
@@ -41,37 +41,47 @@ class player_sock(object):
     def open(self):
         self.send("log", "on")
         i = 0
-        check, data = self.receive()
-        ping, message = self.parse(data)
-        while message != "success" or ping == 0:
-            check, data = self.receive()
-            ping, message = self.parse(data)
-            i += 1
-            if i >= 5:
-                return False
-        return True
+        while i < 5:
+            data = self.receive()
+            if data != []:
+                for row in data:
+                    ping, message = self.parse(row)
+                    if message != "success":
+                        print ping, message
+                        i += 1
+                    else:
+                        return True
+        return False
 
     def close(self):
         self.send("log", "off")
         i = 0
-        check, data = self.receive()
-        ping, message = self.parse(data)
-        while message != "success" or ping == 0:
-            check, data = self.receive()
-            ping, message = self.parse(data)
-            i += 1
-            if i >= 5:
-                break
+        while i < 5:
+            data = self.receive()
+            if data != []:
+                for row in data:
+                    ping, message = self.parse(row)
+                    if message != "success":
+                        print ping, message
+                        i += 1
+                    else:
+                        i = 5
+                        break
         self.sock.close()
         sys.exit()
 
     def receive(self):
-        try:
-            length = None
-            buffer = ""
-            messages = []
-            while True:
-                data = self.sock.recv(4096)
+        length = None
+        buffer = ""
+        messages = []
+        while True:
+            inputready, o, e = select.select([self.sock], [], [])
+            for input in inputready:
+                try:
+                    data = input.recv(4096)
+                except socket.error, msg:
+                    print 'Receive failed. Error : ', msg
+                    return []
                 if not data:
                     break
                 buffer += data
@@ -85,26 +95,24 @@ class player_sock(object):
                         break
                     messages.append("{"+buffer[:length-1])
                     buffer = buffer[length-1:]
-            return True, messages
-        except socket.error, msg:
-            print 'Receive failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
-            return False, "error"
+                    length = None
+            else:
+                break
+        return messages
 
-    def parse(self, dataset):
+    def parse(self, data):
         ping = 0
         message = ""
-        for row in dataset:
-            data = json.loads(row)
-            if self.debug:
-                print "Receive", data
-            if data["type"] == "message":
-                message = data["content"]
-            elif data["type"] == "state":
-                message = "World state"
-            elif data["type"] == "log":
-                message = "success"
-            ping = time.time() - data["timestamp"]
-            print ping, message
+        data = json.loads(data)
+        if self.debug:
+            print "Receive", data
+        if data["type"] == "message":
+            message = data["content"]
+        elif data["type"] == "state":
+            message = "World state"
+        elif data["type"] == "log":
+            message = "success"
+        ping = time.time() - data["timestamp"]
         return ping, message
 
     def send(self, type, data):
