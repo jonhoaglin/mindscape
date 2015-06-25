@@ -26,10 +26,10 @@ class common_sock(object):
             self.sock.listen(5)
             print "Server Listening..."
             self.world = ""
-            self.players = []
+            self.players = {}
 
-    def open(self):
-        self.send(self.sock, "log", "on")
+    def open(self, username):
+        self.send(self.sock, "logon", username)
         i = 0
         while i < 5:
             data = self.receive(self.sock)
@@ -44,7 +44,7 @@ class common_sock(object):
         return False
 
     def close(self):
-        self.send(self.sock, "log", "off")
+        self.send(self.sock, "logoff", "off")
         i = 0
         while i < 5:
             data = self.receive(self.sock)

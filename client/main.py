@@ -8,7 +8,7 @@ import common
 class player(object):
     def __init__(self, debug=False):
         self.sock = player_sock([socket.gethostname(), 5192], [socket.gethostname(), 5190], debug)
-        if self.sock.open():
+        if self.sock.open("TestPlayer"):
             while True:
                 input = raw_input("Player >> ")
                 data = self.sock.receive(self.sock.sock)
